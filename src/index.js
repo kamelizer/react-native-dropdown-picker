@@ -6,8 +6,10 @@ import {
     TouchableOpacity,
     ScrollView,
     Platform,
-    TextInput
+    TextInput,
+    ViewPropTypes
 } from 'react-native';
+import PropTypes from 'prop-types';
 
 // Icon
 import Feather from 'react-native-vector-icons/Feather';
@@ -19,7 +21,6 @@ class DropDownPicker extends React.Component {
 
         let choice;
         let items = [];
-        let defaultValueIndex; // captures index of first defaultValue for initial scrolling
         if (! props.multiple) {
             if (props.defaultValue || props.defaultValue === 0) {
                 choice = props.items.find(item => item.value === props.defaultValue);
@@ -28,7 +29,6 @@ class DropDownPicker extends React.Component {
             } else {
                 choice = this.null();
             }
-            defaultValueIndex = props.items.findIndex(item => item.value === props.defaultValue);
         } else {
             if (props.defaultValue && Array.isArray(props.defaultValue) && props.defaultValue.length > 0) {
                 props.defaultValue.forEach((value, index) => {
@@ -39,7 +39,6 @@ class DropDownPicker extends React.Component {
             } else if (props.items.filter(item => item.hasOwnProperty('selected') && item.selected === true).length > 0) {
                 items = props.items.filter((item, index) => item.hasOwnProperty('selected') && item.selected === true);
             }
-            defaultValueIndex = props.items.findIndex(item => item.value === props.defaultValue[0]);
         }
 
         this.state = {
@@ -54,11 +53,8 @@ class DropDownPicker extends React.Component {
                 multiple: props.multiple,
                 defaultValue: props.defaultValue,
                 isVisible: props.isVisible
-            },
-            initialScroll: props?.autoScrollToDefaultValue,
-            defaultValueIndex
+            }
         };
-        this.dropdownCoordinates = [];
     }
 
     static getDerivedStateFromProps(props, state) {
@@ -128,23 +124,6 @@ class DropDownPicker extends React.Component {
         this.props.controller(this);
     }
 
-    componentDidUpdate() {
-        // ScrollView scrollTo() can only be used after the ScrollView is rendered
-        // Automatic scrolling to first defaultValue occurs on first render of dropdown ScrollView
-        const item = this.props.items[this.state.defaultValueIndex];
-        const isItemVisible = item && (typeof item.hidden === 'undefined' || item.hidden === false);
-        if (this.state.initialScroll && this.state.isVisible && isItemVisible) {
-            setTimeout(() => {
-                this.scrollViewRef.scrollTo({
-                    x: 0,
-                    y: this.dropdownCoordinates[this.state.defaultValueIndex],
-                    animated: true,
-                });
-                this.setState({initialScroll: false});
-            }, 200);
-        }
-    }
-
     reset() {
         const item = this.props.multiple ? [] : this.null();
         this.props.onChangeItem(item, -1);
@@ -163,6 +142,7 @@ class DropDownPicker extends React.Component {
             isVisible: ! this.state.isVisible,
         }, () => {
             const isVisible = this.state.isVisible;
+
             if (isVisible) {
         		this.open(false);
         	} else {
@@ -238,10 +218,6 @@ class DropDownPicker extends React.Component {
         this.props.onChangeList(data.items, callback);
     }
 
-    isOpen() {
-        return this.state.isVisible;
-    }
-
     open(setState = true) {
         this.setState({
             ...(setState && {isVisible: true})
@@ -250,8 +226,7 @@ class DropDownPicker extends React.Component {
 
     close(setState = true) {
         this.setState({
-            ...(setState && {isVisible: false}),
-            searchableText: null
+            ...(setState && {isVisible: false})
         }, () => this.props.onClose());
     }
 
@@ -289,8 +264,7 @@ class DropDownPicker extends React.Component {
                 props: {
                     ...this.state.props,
                     isVisible: false
-                },
-                searchableText: null
+                }
             });
 
             const index = this.props.items.findIndex(i => i.value === item.value);
@@ -367,8 +341,8 @@ class DropDownPicker extends React.Component {
     render() {
         this.props.controller(this);
         const { multiple, disabled } = this.state.props;
-        const { placeholder, scrollViewProps, searchTextInputProps, renderSeperator} = this.props;
-        const isPlaceholderActive = this.state.choice.label === null || (Array.isArray(this.state.choice) && this.state.choice.length === 0);
+        const { placeholder, scrollViewProps } = this.props;
+        const isPlaceholderActive = this.state.choice.label === null;
         const label = isPlaceholderActive ? (placeholder) : this.getLabel(this.state.choice?.label, true);
         const placeholderStyle = isPlaceholderActive && this.props.placeholderStyle;
         const opacity = disabled ? 0.5 : 1;
@@ -381,7 +355,7 @@ class DropDownPicker extends React.Component {
                   zIndex: this.props.zIndex
               })
 
-            }]} {...this.props.containerProps}>
+            }]}>
                 <TouchableOpacity
                     onLayout={(event) => this.getLayout(event.nativeEvent.layout)}
                     disabled={disabled}
@@ -389,25 +363,23 @@ class DropDownPicker extends React.Component {
                     activeOpacity={1}
                     style={[
                         styles.dropDown,
-                        {
+                        this.state.isVisible && styles.noBottomRadius, {
                             flexDirection: 'row', flex: 1
                         },
                         this.props.style,
-                        this.state.isVisible && styles.noBottomRadius
                     ]}
                 >
 
                         {this.state.choice.icon && ! multiple && this.state.choice.icon()}
                         <Text style={[
-                            { color: 'red' }, // default label color
                             this.props.labelStyle,
                             placeholderStyle, {opacity, flex: 1}, {
                                 marginLeft: (this.props.labelStyle.hasOwnProperty('textAlign') && this.props.labelStyle.textAlign === 'left') || ! this.props.labelStyle.hasOwnProperty('textAlign') ? 5 : 0,
                                 marginRight: (this.props.labelStyle.hasOwnProperty('textAlign') && this.props.labelStyle.textAlign === 'right') ? 5 : 0,
                             },
                             this.state.choice.label !== null && this.props.selectedLabelStyle,
-                            this.state.choice.icon ?? {marginLeft: 5}
-                        ]} {...this.props.labelProps}>
+                            this.state.choice.icon && {marginLeft: 5}
+                        ]}>
                             {multiple ? (
                                 this.state.choice.length > 0 ? this.getNumberOfItems() : placeholder
                             ) : label}
@@ -445,81 +417,64 @@ class DropDownPicker extends React.Component {
                                 defaultValue={this.state.searchableText}
                                 placeholder={this.props.searchablePlaceholder}
                                 placeholderTextColor={this.props.searchablePlaceholderTextColor}
-                                {...searchTextInputProps}
-                                onChangeText={ (text) => {
+                                onChangeText={(text) => {
                                     this.setState({
                                         searchableText: text
                                     })
-                                    if(searchTextInputProps.onChangeText) searchTextInputProps.onChangeText(text);
                                 }}
                             />
                         </View>
                       )
                     }
 
-                    <ScrollView
-                        style={{width: '100%'}}
-                        nestedScrollEnabled={true}
-                        ref={ref => {
-                            this.scrollViewRef = ref;
-                        }}
-                        {...scrollViewProps}>
-                        {items.filter(item => typeof item.hidden === 'undefined' || item.hidden === false).length > 0 ? items.map((item, index) => (
-                            <View
+                    <ScrollView style={{width: '100%'}} nestedScrollEnabled={true} {...scrollViewProps}>
+                        {items.length > 0 ? items.map((item, index) => (
+                            <TouchableOpacity
                                 key={index}
-                                onLayout={event => {
-                                    const layout = event.nativeEvent.layout;
-                                    this.dropdownCoordinates[index] = layout.y;
-                                }}
+                                onPress={() => this.select(item)}
+                                style={[styles.dropDownItem, items?.length - 1 === index ? this.props.lastItemStyle : this.props.itemStyle, (
+                                    this.state.choice.value === item.value && this.props.activeItemStyle
+                                ), {
+                                    opacity: item?.disabled || false === true ? 0.3 : 1,
+                                    alignItems: 'center',
+                                    ...(
+                                        multiple ? {
+                                            justifyContent: 'space-between',
+                                            ...(this.isSelected(item) && this.props.activeItemStyle)
+                                        } : {
+                                            
+                                        }
+                                    )
+                                }]}
+                                disabled={item?.disabled || false === true}
                             >
-                                <TouchableOpacity
-                                    key={index}
-                                    onPress={() => this.select(item)}
-                                    style={[styles.dropDownItem, this.props.itemStyle, (
-                                        this.state.choice.value === item.value && this.props.activeItemStyle
-                                    ), {
-                                        opacity: item?.disabled || false === true ? 0.3 : 1,
-                                        alignItems: 'center',
-                                        ...(
-                                            multiple ? {
-                                                justifyContent: 'space-between',
-                                                ...(this.isSelected(item) && this.props.activeItemStyle)
-                                            } : {
-                                                
-                                            }
-                                        )
-                                    }]}
-                                    disabled={item?.disabled || false === true}
-                                >
-                                    <View style={{
-                                        flexDirection: this.props.itemStyle?.flexDirection ?? 'row',
-                                        ...(this.props.itemStyle.hasOwnProperty('justifyContent') && {
-                                            justifyContent: this.props.itemStyle.justifyContent
-                                        }),
-                                        alignContent: 'center'
-                                    }}>
-                                        {item.icon && item.icon()}
-                                        <Text style={[
-                                            this.props.labelStyle, 
-                                                multiple ?
-                                                (this.isSelected(item) && this.props.activeLabelStyle) : (this.state.choice.value === item.value && this.props.activeLabelStyle)
-                                            , {
-                                            ...(item.icon && {
-                                                marginHorizontal: 5
-                                            })
-                                        }]} {...this.props.labelProps}>
-                                            {this.getLabel(item)}
-                                        </Text>
-                                    </View>
+                                <View style={{
+                                    flexDirection: this.props.itemStyle?.flexDirection ?? 'row',
+                                    ...(this.props.itemStyle.hasOwnProperty('justifyContent') && {
+                                        justifyContent: this.props.itemStyle.justifyContent
+                                    }),
+                                    alignContent: 'center'
+                                }}>
+                                    {item.icon && item.icon()}
+                                    <Text style={[
+                                        this.props.labelStyle, 
+                                            multiple ?
+                                            (this.isSelected(item) && this.props.activeLabelStyle) : (this.state.choice.value === item.value && this.props.activeLabelStyle)
+                                        , {
+                                        ...(item.icon && {
+                                            marginHorizontal: 5
+                                        })
+                                    }]}>
+                                        {this.getLabel(item)}
+                                    </Text>
+                                </View>
 
-                                    {
-                                        this.state.props.multiple && this.state.choice.findIndex(i => i.label === item.label && i.value === item.value) > -1 && (
-                                            this.props.customTickIcon()
-                                        )
-                                    }
-                                </TouchableOpacity>
-                                {renderSeperator && index !== items.length - 1 && renderSeperator()}
-                            </View>
+                                {
+                                    this.state.props.multiple && this.state.choice.findIndex(i => i.label === item.label && i.value === item.value) > -1 && (
+                                        this.props.customTickIcon()
+                                    )
+                                }
+                            </TouchableOpacity>
                         )) : (
                             <View style={styles.notFound}>
                                 {this.props.searchableError()}
@@ -539,6 +494,7 @@ DropDownPicker.defaultProps = {
     dropDownStyle: {},
     containerStyle: {},
     itemStyle: {},
+    lastItemStyle:{},
     labelStyle: {},
     selectedLabelStyle: {},
     placeholderStyle: {},
@@ -559,22 +515,62 @@ DropDownPicker.defaultProps = {
     searchableStyle: {},
     searchablePlaceholderTextColor: 'gray',
     isVisible: false,
-    autoScrollToDefaultValue: false,
     multiple: false,
     multipleText: '%d items have been selected',
     min: 0,
     max: 10000000,
     selectedLabelLength: 1000,
     labelLength: 1000,
-    labelProps: {},
     scrollViewProps: {},
-    searchTextInputProps: {},
-    containerProps: {},
     controller: () => {},
     onOpen: () => {},
     onClose: () => {},
     onChangeItem: () => {},
     onChangeList: () => {},
+};
+
+DropDownPicker.propTypes = {
+    items: PropTypes.array.isRequired,
+    defaultValue: PropTypes.any,
+    placeholder: PropTypes.string,
+    dropDownMaxHeight: PropTypes.number,
+    style: ViewPropTypes.style,
+    dropDownStyle: ViewPropTypes.style,
+    containerStyle: ViewPropTypes.style,
+    itemStyle: ViewPropTypes.style,
+    lastItemStyle: ViewPropTypes.style,
+    labelStyle: Text.propTypes.style,
+    selectedLabelStyle: Text.propTypes.style,
+    placeholderStyle: Text.propTypes.style,
+    activeItemStyle: ViewPropTypes.style,
+    activeLabelStyle: Text.propTypes.style,
+    showArrow: PropTypes.bool,
+    arrowStyle: ViewPropTypes.style,
+    arrowColor: PropTypes.string,
+    arrowSize: PropTypes.number,
+    customArrowUp: PropTypes.func,
+    customArrowDown: PropTypes.func,
+    customTickIcon: PropTypes.func,
+    zIndex: PropTypes.number,
+    disabled: PropTypes.bool,
+    searchable: PropTypes.bool,
+    searchablePlaceholder: PropTypes.string,
+    searchableError: PropTypes.func,
+    searchableStyle: Text.propTypes.style,
+    searchablePlaceholderTextColor: PropTypes.string,
+    isVisible: PropTypes.bool,
+    multiple: PropTypes.bool,
+    multipleText: PropTypes.string,
+    min: PropTypes.number,
+    max: PropTypes.number,
+    selectedLabelLength: PropTypes.number,
+    labelLength: PropTypes.number,
+    scrollViewProps: PropTypes.object,
+    controller: PropTypes.func,
+    onOpen: PropTypes.func,
+    onClose: PropTypes.func,
+    onChangeItem: PropTypes.func,
+    onChangeList: PropTypes.func,
 };
 
 const styles = StyleSheet.create({
@@ -599,12 +595,12 @@ const styles = StyleSheet.create({
         alignItems: 'center'
     },
     dropDownBox: {
+        borderTopLeftRadius: 0,
+        borderTopRightRadius: 0,
         alignItems: 'center',
         justifyContent: 'center',
         position: 'absolute',
-        width: '100%',
-        borderTopLeftRadius: 0,
-        borderTopRightRadius: 0,
+        width: '100%'
     },
     dropDownItem: {
         paddingVertical: 8,
